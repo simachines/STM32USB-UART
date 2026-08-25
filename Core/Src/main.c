@@ -63,6 +63,11 @@ uint8_t usb_tx_buf[2][USB_TX_BUF_SIZE];
 volatile uint8_t  usb_tx_cur = 0;
 volatile uint16_t usb_tx_len = 0;
 volatile uint8_t  usb_tx_busy = 0;
+
+/* Command line buffer for ESP32 control commands (RST/BOOT/RUN/HELP) */
+#define CMD_BUF_SIZE 16
+char cmd_line[CMD_BUF_SIZE];
+volatile uint16_t cmd_line_len = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -77,11 +82,82 @@ static void MX_USART1_UART_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+/* ---- ESP32 control commands over USB CDC ----
+ * Commands (single line, terminated by \r or \n):
+ *   RST  -> reset the ESP32 (normal boot)
+ *   BOOT -> reset the ESP32 into Serial Bootloader mode
+ *   RUN  -> reset the ESP32 into normal run mode
+ *   HELP -> print available commands
+ */
+void esp32_reset(uint8_t boot_mode)
+{
+  // Set GPIO0: low = bootloader, high = normal
+  HAL_GPIO_WritePin(ESP32_GPIO0_GPIO_Port, ESP32_GPIO0_Pin,
+                    boot_mode ? GPIO_PIN_RESET : GPIO_PIN_SET);
+  // Assert reset
+  HAL_GPIO_WritePin(ESP32_EN_GPIO_Port, ESP32_EN_Pin, GPIO_PIN_RESET);
+  HAL_Delay(100);
+  // Release reset
+  HAL_GPIO_WritePin(ESP32_EN_GPIO_Port, ESP32_EN_Pin, GPIO_PIN_SET);
+  // Restore GPIO0 to safe (normal) state
+  HAL_GPIO_WritePin(ESP32_GPIO0_GPIO_Port, ESP32_GPIO0_Pin, GPIO_PIN_SET);
+}
+
+void esp32_handle_command(const char *cmd, uint16_t len)
+{
+  if (len >= 3)
+  {
+    if (cmd[0]=='R' && cmd[1]=='S' && cmd[2]=='T')
+    {
+      esp32_reset(0); // normal boot
+      CDC_Transmit_FS((uint8_t*)"OK RST\r\n", 8);
+    }
+    else if (len >= 4 && cmd[0]=='B' && cmd[1]=='O' && cmd[2]=='O' && cmd[3]=='T')
+    {
+      esp32_reset(1); // bootloader mode
+      CDC_Transmit_FS((uint8_t*)"OK BOOT\r\n", 9);
+    }
+    else if (cmd[0]=='R' && cmd[1]=='U' && cmd[2]=='N')
+    {
+      esp32_reset(0); // normal run
+      CDC_Transmit_FS((uint8_t*)"OK RUN\r\n", 8);
+    }
+    else if (len >= 4 && cmd[0]=='H' && cmd[1]=='E' && cmd[2]=='L' && cmd[3]=='P')
+    {
+      CDC_Transmit_FS((uint8_t*)"RST|BOOT|RUN|HELP\r\n", 19);
+    }
+  }
+}
+
 /* ---- Non-blocking USART1 TX (PC -> ESP32) via DMA ---- */
 void uart1_tx_pump(void);
 
 void uart1_send_byte(uint8_t b)
 {
+  // Intercept command lines (terminated by \r or \n) for ESP32 control.
+  // Commands are NOT forwarded to the ESP32.
+  if (b == '\r' || b == '\n')
+  {
+    if (cmd_line_len > 0)
+    {
+      cmd_line[cmd_line_len] = 0;
+      esp32_handle_command(cmd_line, cmd_line_len);
+      cmd_line_len = 0;
+    }
+    return; // do not forward newline to ESP32
+  }
+
+  // Accumulate into command buffer (only for printable chars)
+  if (cmd_line_len < CMD_BUF_SIZE - 1)
+  {
+    cmd_line[cmd_line_len++] = (char)b;
+  }
+  else
+  {
+    cmd_line_len = 0; // overflow, reset
+  }
+
+  // Forward the byte to the ESP32
   uint16_t next = (uint16_t)((uart1_tx_head + 1) % UART1_TX_BUF_SIZE);
   if (next == uart1_tx_tail)
   {
@@ -158,14 +234,13 @@ int main(void)
   MX_USB_Device_Init();
   /* USER CODE BEGIN 2 */
 
-  // 1. Force the ESP32 into Serial Bootloader Mode using the GPIO pins
-  HAL_GPIO_WritePin(ESP32_GPIO0_GPIO_Port, ESP32_GPIO0_Pin, GPIO_PIN_RESET); // GPIO0 Low (Boot Mode)
+  // 1. Boot the ESP32 normally (GPIO0 high = normal boot, EN released)
+  HAL_GPIO_WritePin(ESP32_GPIO0_GPIO_Port, ESP32_GPIO0_Pin, GPIO_PIN_SET);   // GPIO0 High (Normal Boot)
   HAL_GPIO_WritePin(ESP32_EN_GPIO_Port, ESP32_EN_Pin, GPIO_PIN_RESET);       // EN Low (Reset active)
   HAL_Delay(200);                                                            // Wait for discharge
 
   HAL_GPIO_WritePin(ESP32_EN_GPIO_Port, ESP32_EN_Pin, GPIO_PIN_SET);         // EN High (Release Reset)
-  HAL_Delay(50);                                                             // Wait for bootloader to catch
-  HAL_GPIO_WritePin(ESP32_GPIO0_GPIO_Port, ESP32_GPIO0_Pin, GPIO_PIN_SET);   // GPIO0 High (Safe state)
+  HAL_Delay(50);                                                             // Wait for boot to start
 
   // 2. Start the non-blocking Circular DMA receiver to listen for the ESP32
   HAL_UART_Receive_DMA(&huart1, esp_dma_buffer, BUFFER_SIZE);
