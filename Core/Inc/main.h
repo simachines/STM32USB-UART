@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
-#include "stm32f4xx_hal.h"
+#include "stm32g4xx_hal.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -57,8 +57,8 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define ESP32_GPIO0_Pin GPIO_PIN_15
-#define ESP32_GPIO0_GPIO_Port GPIOB
+#define ESP32_GPIO0_Pin GPIO_PIN_6
+#define ESP32_GPIO0_GPIO_Port GPIOC
 #define ESP32_EN_Pin GPIO_PIN_8
 #define ESP32_EN_GPIO_Port GPIOA
 
