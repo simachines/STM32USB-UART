@@ -15,7 +15,7 @@ cmake-build-*/
 # ===== VS Code =====
 .vscode/
 !.vscode/extensions.json
-
+.vscode\c_cpp_properties.json
 # ===== IAR EWARM =====
 EWARM/Debug/
 EWARM/Release/
