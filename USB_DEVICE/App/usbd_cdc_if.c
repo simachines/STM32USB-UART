@@ -273,7 +273,7 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
   // Keep the USB stack ready for the next incoming data packet
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, Buf);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
-  return (USBD_CDC_OK);
+  return (USBD_OK);
 
   /* USER CODE END 6 */
 }
