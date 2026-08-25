@@ -32,3 +32,5 @@ EWARM/Exe/
 # ===== OS =====
 .DS_Store
 Thumbs.db
+scripts/flash_dfu.bat
+.gitignore
