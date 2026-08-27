@@ -109,7 +109,8 @@ extern USBD_CDC_ItfTypeDef USBD_Interface_fops_FS;
 uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len);
 
 /* USER CODE BEGIN EXPORTED_FUNCTIONS */
-
+void uart1_send_byte(uint8_t b);
+void uart1_send_bulk(const uint8_t *data, uint16_t len);
 /* USER CODE END EXPORTED_FUNCTIONS */
 
 /**

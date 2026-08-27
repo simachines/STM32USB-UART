@@ -264,11 +264,10 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 6 */
 
-  // Non-blocking: copy the USB packet into the USART1 TX ring and let DMA send it
-  for (uint32_t i = 0; i < *Len; i++)
-  {
-    uart1_send_byte(Buf[i]);
-  }
+  // Forward the whole USB packet to the ESP32 in one contiguous DMA burst.
+  // This preserves esptool's SLIP-framed packet integrity (per-byte
+  // forwarding can fragment the packet and corrupt the bootloader's parsing).
+  uart1_send_bulk(Buf, (uint16_t)*Len);
 
   // Keep the USB stack ready for the next incoming data packet
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, Buf);
